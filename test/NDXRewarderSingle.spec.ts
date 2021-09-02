@@ -1,7 +1,7 @@
 import { expect } from 'chai'
 import { BigNumber, constants } from 'ethers'
 import { waffle } from 'hardhat'
-import { DummyERC20, IERC20, TestERC20, IMasterChefV2, NDXRewarderSingle, IRewardsSchedule } from '../typechain'
+import { DummyERC20, IERC20, TestERC20, IMasterChefV2, NDXRewarderSingle, IRewardsSchedule, TestCaller } from '../typechain'
 import { twoManyChefs } from './shared-contracts'
 import { createSnapshot, deployContract, getContract, impersonate, stopImpersonating, sendEtherTo, getBigNumber, withSigner, pauseMining } from './utils'
 
@@ -174,6 +174,8 @@ describe('NDXRewarderSingle', () => {
   describe('updatePool()', () => {
     it('Should harvest pending rewards from MTS', async () => {
       const {mcPid, mtsPid} = await initRewarder()
+      await stakingToken.mint(wallet.address, getBigNumber(2))
+      await masterChefV2.deposit(mcPid, getBigNumber(1), wallet.address)
       const nextBlockNumber = (await waffle.provider.getBlockNumber()) + 1
       let { accRewardsPerShare, lastRewardBlock } = await multiTokenStaking.poolInfo(mtsPid)
       const totalRewards = (await schedule.getRewardsForBlockRange(lastRewardBlock, nextBlockNumber))
@@ -183,6 +185,18 @@ describe('NDXRewarderSingle', () => {
       await expect(rewarder.updatePool(mcPid))
         .to.emit(multiTokenStaking, 'LogUpdatePool')
         .withArgs(mtsPid, nextBlockNumber, 1, accRewardsPerShare)
+    })
+
+    it('Should not update if already updated in same block', async () => {
+      const {mcPid} = await initRewarder()
+      const caller: TestCaller = await deployContract('TestCaller', rewarder.address, mcPid)
+      await stakingToken.mint(wallet.address, getBigNumber(2))
+      await masterChefV2.deposit(mcPid, getBigNumber(1), wallet.address)
+      expect((await rewarder.poolInfo(mcPid)).accRewardsPerShare).to.eq(0)
+      const tx = await caller.testUpdate()
+      const receipt = await tx.wait()
+      const events = receipt.events?.filter(e => e.address == rewarder.address && e.topics[0] == rewarder.interface.getEventTopic('LogUpdatePool(uint256,uint64,uint256,uint256)')) ?? []
+      expect(events?.length).to.eq(1)
     })
 
     it('Should not update lastRewardBlock or accRewardsPerShare if no tokens are staked', async () => {
@@ -279,6 +293,17 @@ describe('NDXRewarderSingle', () => {
       await masterChefV2.deposit(mcPid, getBigNumber(1), wallet.address)
       const rewards = (await pendingRewards(mcPid)).mul(1e12).div(getBigNumber(1)).mul(getBigNumber(1)).div(1e12)
       expect(await rewarder.pendingToken(mcPid, wallet.address, { blockTag: 'pending' })).to.eq(rewards)
+    })
+
+    it('Should not add pending tokens on mts if updated in same block', async () => {
+      const {mcPid} = await initRewarder()
+      const caller: TestCaller = await deployContract('TestCaller', rewarder.address, mcPid)
+      await stakingToken.mint(wallet.address, getBigNumber(1))
+      await masterChefV2.deposit(mcPid, getBigNumber(1), wallet.address)
+      const rewards = (await pendingRewards(mcPid)).mul(1e12).div(getBigNumber(1)).mul(getBigNumber(1)).div(1e12)
+      await expect(caller.testPending(wallet.address))
+        .to.emit(caller, 'LogRewards')
+        .withArgs(rewards, rewards)
     })
   })
 
