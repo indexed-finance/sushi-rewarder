@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.7.6;
 
+import "@openzeppelin/contracts/utils/Create2.sol";
+
 /*
 The MIT License (MIT)
 Copyright (c) 2018 Murray Software, LLC.
@@ -64,5 +66,9 @@ library CloneLibrary {
         eq(mload(add(clone, 0xd)), mload(add(other, 0xd)))
       )
     }
+  }
+
+  function getCloneAddress(address target, bytes32 salt) internal view returns (address) {
+    return Create2.computeAddress(salt, keccak256(getCreateCode(target)));
   }
 }
