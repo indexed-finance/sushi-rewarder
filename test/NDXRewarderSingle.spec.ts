@@ -3,7 +3,7 @@ import { BigNumber, constants } from 'ethers'
 import { waffle } from 'hardhat'
 import { DummyERC20, IERC20, TestERC20, IMasterChefV2, NDXRewarderSingle, IRewardsSchedule, TestCaller } from '../typechain'
 import { twoManyChefs } from './shared-contracts'
-import { createSnapshot, deployContract, getContract, impersonate, stopImpersonating, sendEtherTo, getBigNumber, withSigner, pauseMining } from './utils'
+import { createSnapshot, deployContract, getContract, getBigNumber, withSigner } from './utils'
 
 describe('NDXRewarderSingle', () => {
   const [wallet, wallet1] = waffle.provider.getWallets()
