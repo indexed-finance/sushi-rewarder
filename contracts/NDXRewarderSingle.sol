@@ -8,6 +8,7 @@ import "./interfaces/IMasterChefV2.sol";
 import "./interfaces/INDXRewarderSingle.sol";
 import "./interfaces/IERC20.sol";
 import "./DummyERC20.sol";
+import "hardhat/console.sol";
 
 
 contract NDXRewarderSingle is INDXRewarderSingle {
@@ -40,24 +41,30 @@ contract NDXRewarderSingle is INDXRewarderSingle {
   }
 
   modifier onlyMCV2 {
-    require(msg.sender == address(masterChefV2), 'Only MCV2 can call this function.');
+    require(msg.sender == address(masterChefV2), "Only MCV2 can call this function.");
     _;
   }
 
 /* ==========  Initializer  ========== */
 
-  function init(address _dummyToken, uint128 _masterChefPid) external {
-    require(dummyToken == address(0), "Already initialized");
+  function initMTS(
+    address _stakingToken,
+    address _dummyToken,
+    uint128 _multiTokenStakingPid
+  ) external {
+    require(dummyToken == address(0), "Already initialized MTS");
+    require(multiTokenStaking.lpToken(_multiTokenStakingPid) == _dummyToken, "Bad PID");
+    stakingToken = _stakingToken;
     dummyToken = _dummyToken;
-    masterChefPid = _masterChefPid;
-    stakingToken = masterChefV2.lpToken(_masterChefPid);
+    multiTokenStakingPid = _multiTokenStakingPid;
+    multiTokenStaking.deposit(_multiTokenStakingPid, 1, address(this));
+    _poolInfo.lastRewardBlock = uint64(block.number);
   }
 
-  function initStake(uint128 _multiTokenStakingPid) external {
-    require(multiTokenStakingPid == 0, "Already staked");
-    require(multiTokenStaking.lpToken(_multiTokenStakingPid) == dummyToken, "Bad PID");
-    multiTokenStakingPid = _multiTokenStakingPid;
-    multiTokenStaking.deposit(_multiTokenStakingPid, 1e18, address(this));
+  function initMCV2(uint128 _masterChefPid) external {
+    require(masterChefPid == 0, "Already initialized MCV2");
+    require(masterChefV2.lpToken(_masterChefPid) == stakingToken, "Bad PID");
+    masterChefPid = _masterChefPid;
   }
 
 /* ==========  Queries  ========== */
@@ -91,13 +98,13 @@ contract NDXRewarderSingle is INDXRewarderSingle {
       if (lpSupply > 0) {
         uint256 poolRewards = getRewardsForBlockRange(pool.lastRewardBlock, block.number);
         pool.accRewardsPerShare = pool.accRewardsPerShare.add((poolRewards.mul(ACC_REWARDS_PRECISION) / lpSupply).to128());
+        pool.lastRewardBlock = block.number.to64();
+        _poolInfo = pool;
       }
-      pool.lastRewardBlock = block.number.to64();
-      _poolInfo = pool;
       emit LogUpdatePool(_pid, pool.lastRewardBlock, lpSupply, pool.accRewardsPerShare);
     }
   }
-  
+
   function onSushiReward(
     uint256 pid,
     address _user,
@@ -117,7 +124,7 @@ contract NDXRewarderSingle is INDXRewarderSingle {
       rewardToken.safeTransfer(to, pending);
     }
     user.amount = lpToken;
-    user.rewardDebt = accumulatedRewards;
+    user.rewardDebt = lpToken.mul(pool.accRewardsPerShare) / ACC_REWARDS_PRECISION;
     emit LogOnReward(_user, pid, pending, to);
   }
 
@@ -140,7 +147,7 @@ contract NDXRewarderSingle is INDXRewarderSingle {
   function pendingToken(uint256 _pid, address _user) public view onlyOwnPid(_pid) returns (uint256 pending) {
     PoolInfo memory pool = _poolInfo;
     UserInfo storage user = _userInfo[_user];
-    uint256 lpSupply = IERC20(masterChefV2.lpToken(_pid)).balanceOf(address(masterChefV2));
+    uint256 lpSupply = IERC20(stakingToken).balanceOf(address(masterChefV2));
     if (lpSupply > 0) {
       if (block.number > pool.lastRewardBlock) {
         uint256 poolRewards = getRewardsForBlockRange(pool.lastRewardBlock, block.number);
