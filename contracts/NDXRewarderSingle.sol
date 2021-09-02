@@ -93,10 +93,10 @@ contract NDXRewarderSingle is INDXRewarderSingle {
   function updatePool(uint256 _pid) public override onlyOwnPid(_pid) returns (PoolInfo memory pool) {
     pool = _poolInfo;
     if (block.number > pool.lastRewardBlock) {
-      multiTokenStaking.harvest(multiTokenStakingPid, address(this));
       uint256 lpSupply = IERC20(stakingToken).balanceOf(address(masterChefV2));
       if (lpSupply > 0) {
-        uint256 poolRewards = getRewardsForBlockRange(pool.lastRewardBlock, block.number);
+        uint256 poolRewards = multiTokenStaking.pendingRewards(multiTokenStakingPid, address(this));
+        multiTokenStaking.harvest(multiTokenStakingPid, address(this));
         pool.accRewardsPerShare = pool.accRewardsPerShare.add((poolRewards.mul(ACC_REWARDS_PRECISION) / lpSupply).to128());
         pool.lastRewardBlock = block.number.to64();
         _poolInfo = pool;
@@ -150,7 +150,7 @@ contract NDXRewarderSingle is INDXRewarderSingle {
     uint256 lpSupply = IERC20(stakingToken).balanceOf(address(masterChefV2));
     if (lpSupply > 0) {
       if (block.number > pool.lastRewardBlock) {
-        uint256 poolRewards = getRewardsForBlockRange(pool.lastRewardBlock, block.number);
+        uint256 poolRewards = multiTokenStaking.pendingRewards(multiTokenStakingPid, address(this));
         pool.accRewardsPerShare = pool.accRewardsPerShare.add((poolRewards.mul(ACC_REWARDS_PRECISION) / lpSupply).to128());
       }
       uint256 accumulatedRewards = user.amount.mul(pool.accRewardsPerShare) / ACC_REWARDS_PRECISION;
