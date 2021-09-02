@@ -29,7 +29,7 @@ export default {
       allowUnlimitedContractSize: false,
       forking: {
         url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-        blockNumber: 12486505
+        blockNumber: 12900000
       }
     },
     mainnet: configureNetwork('mainnet', 1),
